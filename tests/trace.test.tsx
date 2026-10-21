@@ -16,6 +16,11 @@ const pane = (bodyColumns: number) =>
     },
   }) as const
 
+// The hover cards' frame laid over each card's picture, and the pictures without it.
+const HOVER_ALT = 'Hover a row for its details'
+const drawn = <T extends { props: Record<string, unknown> }>(svgs: T[]) => svgs.filter(p => p.props.alt !== HOVER_ALT)
+const overlays = <T extends { props: Record<string, unknown> }>(svgs: T[]) => svgs.filter(p => p.props.alt === HOVER_ALT)
+
 const usage = (model: string) => ({
   model,
   input_tokens: 1200,
@@ -116,7 +121,7 @@ test('a run draws as a waterfall, on every surface and width', async ($, on) => 
   // Desktop and mobile draw one SVG; the failed Read's error rides its tooltip.
   for (const surface of ['desktop', 'mobile'] as const) {
     const ui = await $.ui.mount({ ...pane(110), surface })
-    const [summary, svg] = await ui.findAll({ type: 'Svg' })
+    const [summary, svg] = drawn(await ui.findAll({ type: 'Svg' }))
     const source = String(svg?.props.source)
 
     // The summary: every turn's figures; input 1.2k uncached + 10k cache read.
@@ -134,8 +139,13 @@ test('a run draws as a waterfall, on every surface and width', async ($, on) => 
     // Each picture holds its height across redraws, so the pane keeps its scroll.
     expect(summary?.props.height).toBeGreaterThan(0)
     expect(svg?.props.height).toBeGreaterThan(0)
-    // A plain image, so a redraw swaps it without a flash; no dropdown either.
-    expect(svg?.props.isInteractive).toBeUndefined()
+    // A finished card no longer changes: one frame, the picture with each row's
+    // hover card, and nothing laid over it. No dropdown either.
+    expect(svg?.props.isInteractive).toBe(true)
+    expect(overlays(await ui.findAll({ type: 'Svg' }))).toEqual([])
+    expect(source).toContain('class="hr"')
+    expect(source).toContain('>Planning the launch · ')
+    expect(source).toContain('ENOENT')
     expect(await ui.find({ type: 'Select' })).toBeUndefined()
     expect(source).toContain('Planning the launch')
     expect(source).toContain('Researcher')
@@ -144,7 +154,7 @@ test('a run draws as a waterfall, on every surface and width', async ($, on) => 
     expect(source).toContain('✓ Done')
 
     // Folding the subagent takes its call out of the picture.
-    const card = async () => String((await ui.findAll({ type: 'Svg' }))[1]?.props.source)
+    const card = async () => String((drawn(await ui.findAll({ type: 'Svg' })))[1]?.props.source)
     await ui.press({ key: 'fold:t1:agent-1' })
     expect(await card()).not.toContain('Competitors anchor')
     await ui.press({ key: 'fold:t1:agent-1' })
@@ -172,7 +182,7 @@ test('turns stack newest first until a reset clears them', async ($, on) => {
   }
 
   const ui = await $.ui.mount({ ...pane(110), surface: 'desktop' })
-  const sources = async () => (await ui.findAll({ type: 'Svg' })).map(p => String(p.props.source))
+  const sources = async () => (drawn(await ui.findAll({ type: 'Svg' }))).map(p => String(p.props.source))
   const [summary, second, first] = await sources()
   expect(summary).toContain('Second question')
   expect(summary).toContain('First question')
@@ -191,11 +201,24 @@ test('turns stack newest first until a reset clears them', async ($, on) => {
 
   // Reset clears the finished turns and keeps the live one.
   await $.turn.start({ text: 'Third question', turnId: 't3' })
+  for await (const _ of $.turn.step({ turnId: 't3', index: 0, model: 'claude-opus-5-5', messageCount: 1 }));
   await ui.press({ key: 'reset' })
   const kept = await sources()
   expect(kept.length).toBe(2)
   expect(kept[1]).toContain('Third question')
   expect(kept[1]).toContain('● Live')
+  // A live card is a plain image, so a redraw swaps it without a flash, under a frame
+  // of its calls' hover cards, the same height. The Claude row has none: its name is its fold button.
+  const live = drawn(await ui.findAll({ type: 'Svg' })).at(-1)
+  expect(live?.props.isInteractive).toBeUndefined()
+  const [hover] = overlays(await ui.findAll({ type: 'Svg' }))
+  expect(hover?.props.isInteractive).toBe(true)
+  expect(hover?.props.height).toBe(live?.props.height)
+  expect(hover?.props.width).toBe(live?.props.width)
+  expect(live?.props.width).toBeGreaterThan(0)
+  expect(String(hover?.props.source)).toContain('class="hr"')
+  expect(String(hover?.props.source)).not.toContain('>Claude · ')
+  expect(String(hover?.props.source)).toContain('color-scheme:light dark')
   expect(kept[0]).not.toContain('First question')
 
   await $.turn.complete({ turnId: 't3', reason: 'answer', answer: 'Done', durationMs: 1000, isAborted: false })
@@ -269,9 +292,9 @@ test('a huge turn stays inside the picture limit, and each call runs once', { ti
   expect(ran.tools).toBe(400)
 
   const ui = await $.ui.mount({ ...pane(110), surface: 'desktop' })
-  const source = String((await ui.findAll({ type: 'Svg' }))[1]?.props.source)
+  const source = String((drawn(await ui.findAll({ type: 'Svg' })))[1]?.props.source)
   expect(source.length).toBeLessThanOrEqual(131072)
-  expect((await ui.findAll({ type: 'Svg' }))[1]?.props.height).toBeLessThanOrEqual(4096)
+  expect((drawn(await ui.findAll({ type: 'Svg' })))[1]?.props.height).toBeLessThanOrEqual(4096)
   expect(source).toContain('not drawn')
   expect(source).toContain('file number 399')
   await ui.unmount()
@@ -302,7 +325,7 @@ test('a compaction shows on the waterfall, in the live turn or as a card of its 
   await $.session.compact({ trigger: 'precompute', messages })
 
   const ui = await $.ui.mount({ ...pane(110), surface: 'desktop' })
-  const [summary, own, turn] = (await ui.findAll({ type: 'Svg' })).map(p => String(p.props.source))
+  const [summary, own, turn] = (drawn(await ui.findAll({ type: 'Svg' }))).map(p => String(p.props.source))
   expect(turn).toContain('Turn 1')
   // Its row, and its key in the legend.
   expect(turn).toContain('class="t">Compaction<')
@@ -312,11 +335,11 @@ test('a compaction shows on the waterfall, in the live turn or as a card of its 
   expect(own).toContain('/compact keep the plan')
   expect(own).not.toContain('ahead of time')
   expect(summary).toContain('—')
-  expect((await ui.findAll({ type: 'Svg' })).length).toBe(3)
+  expect((drawn(await ui.findAll({ type: 'Svg' }))).length).toBe(3)
 
   // Folded, the turn carries the compaction as a mark on its line.
   await ui.press({ key: 'fold:t1:root' })
-  const folded = String((await ui.findAll({ type: 'Svg' }))[2]?.props.source)
+  const folded = String((drawn(await ui.findAll({ type: 'Svg' })))[2]?.props.source)
   expect(folded).not.toContain('182k → 24k')
   expect(folded).toContain('#D9A23B')
   await ui.unmount()
@@ -342,15 +365,19 @@ test('the slowest call wears a turtle before its name; the fold buttons head the
   await $.turn.complete({ turnId: 't1', reason: 'answer', answer: 'Done', durationMs: 10000, isAborted: false })
 
   const ui = await $.ui.mount({ ...pane(110), surface: 'desktop' })
-  const source = String((await ui.findAll({ type: 'Svg' }))[1]?.props.source)
+  const source = String((drawn(await ui.findAll({ type: 'Svg' })))[1]?.props.source)
   // The LLM call took 6.9s, the Bash 3s: the turtle comes before "Planning the launch".
   expect(source).not.toContain('SLOWEST')
   expect(source.indexOf('🐢')).toBeGreaterThan(-1)
   expect(source.indexOf('🐢')).toBeLessThan(source.indexOf('>Planning the launch<'))
   expect(source).toContain('Slowest call')
+  // The turn folds from a button laid over its Claude row; the bar above holds no "Whole turn".
   const card = JSON.stringify((await ui.find({ type: 'Box', key: 'run:t1' }))?.children)
-  expect(card.indexOf('fold:t1:root')).toBeGreaterThan(-1)
-  expect(card.indexOf('fold:t1:root')).toBeLessThan(card.indexOf('<svg'))
+  expect(card.indexOf('fold:t1:root')).toBeGreaterThan(card.indexOf('<svg'))
+  expect(card).not.toContain('Whole turn')
+  await ui.press({ key: 'fold:t1:root' })
+  expect(String(drawn(await ui.findAll({ type: 'Svg' }))[1]?.props.source)).not.toContain('>Planning the launch<')
+  await ui.press({ key: 'fold:t1:root' })
   await ui.unmount()
 
   const term = await $.ui.mount({ ...pane(110), surface: 'terminal' })

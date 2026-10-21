@@ -12,6 +12,7 @@ https://github.com/user-attachments/assets/af4ad973-55d6-48d7-8f8a-be67e6a6b67e
 - **Spot problems fast**: failed calls in red, 🐢 on the slowest call, compactions in amber (`182k → 24k`).
 - **Per turn and in total**: one card per turn, newest first, under a summary of all turns.
 - **Fold anything**: collapse a turn or a subagent to a single row.
+- **Hover for details** (desktop): tokens in and out, cache hits, TTFT, tok/s, cost, input, output and errors.
 - **Everywhere**: SVG on desktop and mobile, text in the terminal and VS Code.
 
 Costs are estimates at API list prices.

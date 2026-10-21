@@ -12,6 +12,7 @@ https://github.com/user-attachments/assets/af4ad973-55d6-48d7-8f8a-be67e6a6b67e
 - **一眼看出問題**：失敗的呼叫標紅，最慢的呼叫有 🐢，壓縮 context 以琥珀色標出（`182k → 24k`）。
 - **每輪與總計**：一輪一張卡片，最新的在上面，最上方是所有輪的總表。
 - **隨意收合**：整輪或任一個 subagent 都能收成一列。
+- **滑鼠移上去看詳情**（桌面版）：input/output token、cache 命中、TTFT、tok/s、成本、輸入輸出與錯誤。
 - **各種介面**：桌面版與手機畫成 SVG，終端機與 VS Code 畫成文字。
 
 成本依 API 牌價估算。

@@ -26,7 +26,7 @@ import {
   TOKEN_COLORS,
   track,
 } from './model'
-import { summarySvg, waterfallSvg } from './svg'
+import { summarySvg, waterfallSvg, type WaterfallPicture } from './svg'
 import type { Stat } from './svg'
 
 const PANE = 'trace-waterfall'
@@ -55,8 +55,15 @@ let compactions = 0
 // compaction's usage names none, and it runs on its loop's model.
 const models = new Map<string, string>()
 
-// A remote surface counts its width in its code font's advance: about this many px.
+// A remote surface counts its width in its code font's advance: about this many px,
+// and its rows in its line height: about this many.
 const PX_PER_COLUMN = 7.5
+const PX_PER_ROW = 20
+// The alt of the hover cards' frame over a card's picture.
+const HOVER_ALT = 'Hover a row for its details'
+// A label that draws nothing yet holds its width: spaces are trimmed away, and
+// the button with them, so the Claude row's own chevron in the picture shows.
+const BLANK = '\u2800'
 // The most an Svg's source may hold (SvgProps.source).
 const SVG_LIMIT = 131072
 // The tallest an Svg may be drawn, in CSS px (SvgProps.height).
@@ -67,8 +74,7 @@ const SVG_HEIGHT_LIMIT = 4096
  * once per width and fold state, not on every tick. Module-local, so a reload
  * starts it afresh.
  */
-const drawn = new Map<string, { key: string; picture: Picture }>()
-type Picture = { source: string; height: number }
+const drawn = new Map<string, { key: string; picture: WaterfallPicture }>()
 
 function withSpan(r: Run, span: Span): Run {
   return r.spans.some(s => s.id === span.id)
@@ -205,8 +211,14 @@ function clockTime(t: number): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
+// Opens the pane and draws it anew: a drawing from before a reload keeps its
+// buttons' handles, which the reload let go, so a press on one goes nowhere.
 async function openPane($: EngineInterface) {
-  return $.ui.open({ id: PANE, title: 'Trace' })
+  const placed = await $.ui.open({ id: PANE, title: 'Trace' })
+  const t = await $.clock.now()
+  await update($, now, () => t)
+
+  return placed
 }
 
 export const register: Register = on => {
@@ -665,7 +677,12 @@ export const register: Register = on => {
     const drawRun = (r: Run) => {
       const keyOf = (s: Span) => `${r.id}:${s.id}`
       const isFolded = (s: Span) => folded.includes(keyOf(s))
-      const fold = (s: Span) => update($, collapsed, keys => toggle(keys, keyOf(s)))
+      // The card grows or shrinks under the pointer: keep the row that was pressed in view.
+      const fold = async (s: Span) => {
+        await update($, collapsed, keys => toggle(keys, keyOf(s)))
+        // A surface that cannot scroll leaves the pane as it is.
+        await $.ui.scroll({ in: PANE, to: { key: `fold:${keyOf(s)}` }, block: 'nearest' }).catch(() => undefined)
+      }
 
       const kids = new Map<string, Span[]>()
       for (const s of r.spans) {
@@ -760,12 +777,25 @@ export const register: Register = on => {
         )
       }
 
-      // The picture is laid out to the pane's width. A plain image, not a
-      // frame, so a redraw swaps it in place without a flash.
+      // The picture is laid out to the pane's width. A finished turn's no longer
+      // changes: one frame, the picture and its hover cards. A live turn's is a
+      // plain image, so a redraw swaps it in place without a flash, under a frame
+      // of the hover cards alone, which changes only as calls start and end.
       if (pictures) {
         const { Svg } = pictures
+        const isSettled = r.status !== 'running' && r.spans.every(s => s.end !== undefined)
+        // A running span's card says it runs rather than for how long, so it holds still.
+        const tipOf = (span: Span) => ({
+          title: span.detail ? `${span.name} · ${span.detail}` : span.name,
+          lines: detailLines(span).map(([k, v, color]): [string, string, boolean] => [
+            k,
+            k === 'Duration' && span.status === 'running' ? 'running…' : v,
+            color === 'error',
+          ]),
+        })
         const draw = (shown: typeof rows, hidden: number) =>
           waterfallSvg({
+            rowPx: PX_PER_ROW,
             width: cols * PX_PER_COLUMN,
             title,
             prompt: r.prompt,
@@ -785,6 +815,8 @@ export const register: Register = on => {
               isSlowest: span === slowest,
               cost: rolled(span, s => s.cost),
               firstByte: span.firstByte,
+              // The root's name is its fold button, which takes the pointer; the card's head holds its totals.
+              tip: span === root ? undefined : tipOf(span),
               marks: isFolded(span)
                 ? below(span)
                     .filter(isMark)
@@ -794,7 +826,7 @@ export const register: Register = on => {
           })
         // Too many rows for one picture (too long, or too tall): keep the root and the latest rows,
         // where a live turn's work is, and say how many were left out.
-        const fit = (): Picture => {
+        const fit = (): WaterfallPicture => {
           let picture = draw(rows, 0)
           for (let keep = rows.length; (picture.source.length > SVG_LIMIT || picture.height > SVG_HEIGHT_LIMIT) && keep > 2; ) {
             keep = Math.max(2, Math.floor(keep * 0.85))
@@ -803,7 +835,6 @@ export const register: Register = on => {
 
           return picture
         }
-        const isSettled = r.status !== 'running' && r.spans.every(s => s.end !== undefined)
         const cacheKey = [
           cols,
           r.status,
@@ -814,7 +845,10 @@ export const register: Register = on => {
         const cached = drawn.get(r.id)
         const picture = isSettled && cached?.key === cacheKey ? cached.picture : fit()
         if (isSettled) drawn.set(r.id, { key: cacheKey, picture })
-        const branches = r.spans.filter(s => (kids.get(s.id)?.length ?? 0) > 0)
+        // The root folds from its own row; the bar holds the subagents'.
+        const branches = r.spans.filter(s => s.id !== 'root' && (kids.get(s.id)?.length ?? 0) > 0)
+        const rootTop = Math.max(0, Math.round((picture.root.top + picture.root.height / 2) / PX_PER_ROW - 0.5))
+        const rootCols = Math.max(4, Math.floor(picture.root.width / PX_PER_COLUMN))
         const failed = r.spans.filter(s => s.status === 'failed' && s.error)
         const summary = `${title}, "${r.prompt}": ${sayStats(stats)}`
 
@@ -827,12 +861,29 @@ export const register: Register = on => {
                 {branches.map(b => (
                   <Button key={`fold:${keyOf(b)}`} plain onPress={() => fold(b)}>
                     {isFolded(b) ? '▸ ' : '▾ '}
-                    {b.id === 'root' ? (r.isCompaction ? 'Whole card' : 'Whole turn') : b.name}
+                    {b.name}
                   </Button>
                 ))}
               </Box>
             )}
-            <Svg source={picture.source} height={picture.height} alt={summary} />
+            <Box flexDirection="column">
+              {isSettled && picture.withHover ? (
+                <Svg source={picture.withHover} width={picture.width} height={picture.height} alt={summary} isInteractive />
+              ) : (
+                <Svg source={picture.source} width={picture.width} height={picture.height} alt={summary} />
+              )}
+              {!isSettled && picture.overlay && (
+                <Box position="absolute" top={0} left={0} right={0}>
+                  <Svg source={picture.overlay} width={picture.width} height={picture.height} alt={HOVER_ALT} isInteractive />
+                </Box>
+              )}
+              {/* The blank's width is the font's, not a column's: the label runs long and the box cuts it at the name's edge. */}
+              <Box position="absolute" top={rootTop} left={0} width={rootCols} overflow="hidden">
+                <Button key={`fold:${keyOf(root)}`} plain onPress={() => fold(root)}>
+                  {BLANK.repeat(rootCols * 2)}
+                </Button>
+              </Box>
+            </Box>
             {failed.map(s => (
               <Box flexDirection="row" columnGap={1} marginTop={1}>
                 <Text color="error">✕ {s.name}</Text>

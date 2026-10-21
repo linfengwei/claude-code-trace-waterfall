@@ -13,6 +13,8 @@ export type SvgRow = {
   marks: { start: number; end: number; kind: Span['kind']; status: SpanStatus }[]
   /** An LLM call's first byte back: before it the bar is drawn pale, as waiting. */
   firstByte?: number
+  /** The row's details, shown over the card while the pointer is on the row. */
+  tip?: { title: string; lines: [label: string, value: string, isError?: boolean][] }
 }
 
 /** One figure: its value, an optional line under it, and an optional split bar. */
@@ -40,6 +42,11 @@ export type SvgModel = {
   rows: SvgRow[]
   /** Spans left out to keep the picture under the surface's size limit. */
   hidden?: number
+  /**
+   * The pane's row height in CSS px, where a button is laid over the root
+   * row: the table drops to put that row's middle on a row's middle.
+   */
+  rowPx?: number
 }
 
 const PAD = 20
@@ -58,6 +65,18 @@ const PROMPT_MIN_W = 220
 const FONT = `-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif`
 // How long a running bar keeps growing on its own between two redraws.
 const GROW_S = 30
+// The hover card: its width, its line height, the cells a row's name is cut into
+// across and down (the cell under the pointer places the card's corner there),
+// the card's gap from the pointer, and the most lines a value wraps to.
+const TIP_W = 340
+const TIP_LINE = 17
+const CELLS_ACROSS = 24
+const CELLS_DOWN = 2
+const TIP_GAP = 6
+const TIP_VALUE_LINES = 3
+// The most an Svg's source may hold (SvgProps.source), and the room the hover layer's style takes.
+const SVG_LIMIT = 131072
+const STYLE_ROOM = 16384
 
 const STYLE = `
   .card{fill:#1e1e21;stroke:#2f2f34}
@@ -96,6 +115,32 @@ const TURTLE = '🐢'
 
 const esc = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
+/**
+ * The text in lines of at most `maxPx`, `maxLines` at most, the last cut with an
+ * ellipsis. A line breaks at its last space where one is near the end, else mid-word.
+ */
+function wrapTo(s: string, maxPx: number, size: number, maxLines: number): string[] {
+  const lines: string[] = []
+  let line = ''
+  for (const ch of s.replace(/\s+/g, ' ')) {
+    if (textWidth(line + ch, size) > maxPx) {
+      const cut = line.lastIndexOf(' ')
+      const atSpace = cut > line.length * 0.6
+      lines.push(atSpace ? line.slice(0, cut) : line)
+      line = atSpace ? line.slice(cut + 1) : ''
+      if (lines.length === maxLines) break
+    }
+    line += ch
+  }
+  if (lines.length < maxLines) {
+    if (line) lines.push(line)
+  } else {
+    lines[maxLines - 1] = clipTo(lines[maxLines - 1]! + '……', maxPx, size)
+  }
+
+  return lines
+}
 
 /** A rough width in px: wide (CJK) glyphs are a full em, the rest a little over half. */
 function textWidth(s: string, size: number): number {
@@ -252,12 +297,99 @@ function statColumns(W: number, n: number): number {
 }
 
 /**
+ * The hover layer: each row's name cut into cells, and its card, hidden until
+ * the pointer is on the name. The cell under the pointer puts the card's top left
+ * corner there; by the right edge the card turns to the pointer's left, and
+ * near the bottom it opens upward. Plain CSS (each cell is placed by its class),
+ * since an interactive surface draws it and nothing runs.
+ */
+function hoverLayer(rows: SvgRow[], W: number, nameW: number, height: number, rowsY: number, budget: number): string[] {
+  if (!rows.some(r => r.tip)) return []
+  const cellW = nameW / CELLS_ACROSS
+  const cellH = ROW_H / CELLS_DOWN
+  const valueX = 96
+  const valueW = TIP_W - valueX - 12
+  const cells = Array.from({ length: CELLS_ACROSS * CELLS_DOWN }, (_, c) => {
+    const x = (c % CELLS_ACROSS) * cellW
+    const y = Math.floor(c / CELLS_ACROSS) * cellH
+    // Where the pointer is, about: the cell's middle.
+    const px = x + cellW / 2
+    const tx = px + TIP_GAP + TIP_W <= W - PAD ? px + TIP_GAP : Math.max(PAD, px - TIP_GAP - TIP_W)
+    return { x, y, tx, ty: y + cellH / 2 }
+  })
+  const out = [
+    '<style>.tip{display:none;pointer-events:none}.hr:hover .tip{display:inline}',
+    `.hr>[class^=c]{width:${r1(cellW + 0.5)}px;height:${r1(cellH + 0.5)}px;fill:transparent}`,
+    // The band lights the whole row, but only the name's cells take the pointer.
+    '.hl{pointer-events:none}.hr:hover .hl{fill-opacity:.05}.tipbox{fill:#2a2a2f;stroke:#45454d}',
+    // A frame whose color scheme is not the page's is drawn opaque: follow the system's, as the page does by default.
+    ':root{color-scheme:light dark}',
+    ...cells.map((c, k) => `.c${k}{x:${r1(c.x)}px;y:${r1(c.y)}px}.c${k}:hover~.tip{transform:translate(${r1(c.tx)}px,${r1(c.ty)}px)}`),
+    '</style>',
+  ]
+  const cellMarks = cells.map((_, k) => `<rect class="c${k}"/>`).join('')
+  // The latest rows first, as far as the budget goes: a huge turn's last rows keep their cards.
+  const parts: string[] = []
+  let used = 0
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const row = rows[i]!
+    if (!row.tip) continue
+    const y = rowsY + i * ROW_H
+    const lines = row.tip.lines.flatMap(([label, value, isError]) =>
+      wrapTo(value, valueW, 12, TIP_VALUE_LINES).map((text, j) => ({ label: j === 0 ? label : '', text, isError })),
+    )
+    const tipH = 40 + lines.length * TIP_LINE
+    // The card's top against the pointer's height: below it, else above it, else as low as it fits.
+    const top =
+      y + ROW_H + TIP_GAP + tipH <= height - 4
+        ? TIP_GAP
+        : y - TIP_GAP - tipH >= 4
+          ? -TIP_GAP - tipH
+          : Math.max(4, height - 4 - tipH) - y - ROW_H / 2
+    const part = [
+      `<g class="hr" transform="translate(0 ${y})">`,
+      `<rect class="hl" x="0" y="0" width="${W}" height="${ROW_H}" fill="#fff" fill-opacity="0"/>`,
+      cellMarks,
+      '<g class="tip">',
+      `<rect class="tipbox" x="0" y="${r1(top)}" width="${TIP_W}" height="${tipH}" rx="8"/>`,
+      `<text x="12" y="${r1(top + 22)}" font-size="13" font-weight="600" class="t">${esc(clipTo(row.tip.title, TIP_W - 24, 13))}</text>`,
+      ...lines.map(
+        (l, j) =>
+          (l.label ? `<text x="12" y="${r1(top + 42 + j * TIP_LINE)}" font-size="12" class="s">${esc(l.label)}</text>` : '') +
+          `<text x="${valueX}" y="${r1(top + 42 + j * TIP_LINE)}" font-size="12" ${l.isError ? `fill="${KIND.failed}"` : 'class="t"'}>${esc(l.text)}</text>`,
+      ),
+      '</g></g>',
+    ].join('')
+    if (used + part.length > budget) break
+    used += part.length
+    parts.unshift(part)
+  }
+
+  return [...out, ...parts]
+}
+
+/**
  * The waterfall at the pane's own width: the name column and the label room
  * keep their size, the track takes the rest. The markup is `width="100%"`
  * over a viewBox of that width over ZOOM, so it fills the slot even where the
  * width we were told is a little off.
  */
-export function waterfallSvg(m: SvgModel): { source: string; height: number } {
+/**
+ * A turn's card: the picture; the hover layer alone, to lay over the picture
+ * as it is redrawn as a plain image; and the two in one (`withHover`), for a
+ * card that no longer changes. `root` is the root row's band and its name
+ * column, in CSS px from the picture's top left.
+ */
+export type WaterfallPicture = {
+  source: string
+  width: number
+  height: number
+  overlay?: string
+  withHover?: string
+  root: { top: number; height: number; width: number }
+}
+
+export function waterfallSvg(m: SvgModel): WaterfallPicture {
   const W = Math.max(320, Math.round(m.width / ZOOM))
   const isNarrow = W < 600
   const nameW = Math.round(Math.min(300, Math.max(160, W * (isNarrow ? 0.38 : 0.34))))
@@ -271,7 +403,9 @@ export function waterfallSvg(m: SvgModel): { source: string; height: number } {
   const statCols = statColumns(W, m.stats.length)
   const statRows = Math.ceil(m.stats.length / statCols)
   const statsH = statRows * STAT_H + 12
-  const axisY = HEADER_H + statsH
+  const rootMid = (HEADER_H + statsH + AXIS_H + ROW_H / 2) * ZOOM
+  const drop = m.rowPx ? ((Math.ceil(rootMid / m.rowPx - 0.5) + 0.5) * m.rowPx - rootMid) / ZOOM : 0
+  const axisY = HEADER_H + statsH + drop
   const rowsY = axisY + AXIS_H
   const footY = rowsY + m.rows.length * ROW_H + 12
   const height = footY + 36
@@ -319,7 +453,7 @@ export function waterfallSvg(m: SvgModel): { source: string; height: number } {
     }
   }
 
-  // The rows.
+  // The rows. The first one's name column is where a press folds it.
   m.rows.forEach((row, i) => {
     const { span } = row
     const y = rowsY + i * ROW_H
@@ -446,7 +580,20 @@ export function waterfallSvg(m: SvgModel): { source: string; height: number } {
     lx += w + 18
   }
   if (note) out.push(`<text x="${W - PAD}" y="${ly}" font-size="12" text-anchor="end" class="${note.cls}">${note.text}</text>`)
-  out.push('</svg>')
+  const picture = out.join('')
+  // The name column, the waterfall's first, up to the track's edge.
+  const nameEnd = trackX - 14
+  const hover = hoverLayer(m.rows, W, nameEnd, height, rowsY, SVG_LIMIT - STYLE_ROOM)
+  const inPicture = hoverLayer(m.rows, W, nameEnd, height, rowsY, SVG_LIMIT - STYLE_ROOM - picture.length)
 
-  return { source: out.join(''), height: Math.round(height * ZOOM) }
+  return {
+    source: `${picture}</svg>`,
+    width: Math.round(W * ZOOM),
+    height: Math.round(height * ZOOM),
+    overlay: hover.length
+      ? `<svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 ${W} ${height}" font-family="${FONT}"><style>${STYLE}</style>${hover.join('')}</svg>`
+      : undefined,
+    withHover: inPicture.length ? `${picture}${inPicture.join('')}</svg>` : undefined,
+    root: { top: rowsY * ZOOM, height: ROW_H * ZOOM, width: Math.round(nameEnd * ZOOM) },
+  }
 }
