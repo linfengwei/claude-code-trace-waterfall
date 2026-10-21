@@ -1,0 +1,9 @@
+{
+  "name": "trace-waterfall",
+  "version": "0.1.0",
+  "description": "A live trace pane: every LLM call, tool call and subagent of the current run as a bar on a timeline, with tokens and estimated cost",
+  "author": {
+    "name": "linfengwei"
+  },
+  "types": "./types/index.d.ts"
+}

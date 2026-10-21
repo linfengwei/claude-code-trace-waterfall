@@ -1,0 +1,13 @@
+{
+  "name": "trace-waterfall",
+  "description": "A live trace waterfall pane for Claude Code runs",
+  "owner": {
+    "name": "linfengwei"
+  },
+  "plugins": [
+    {
+      "name": "trace-waterfall",
+      "source": "./"
+    }
+  ]
+}
