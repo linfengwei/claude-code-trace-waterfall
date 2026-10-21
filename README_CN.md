@@ -34,14 +34,14 @@
 從 shell：
 
 ```bash
-claude plugin marketplace add linfengwei/trace-waterfall
+claude plugin marketplace add linfengwei/claude-code-trace-waterfall
 claude plugin install trace-waterfall@trace-waterfall
 ```
 
 或在終端機的 Claude Code 提示列輸入：
 
 ```
-/plugin marketplace add linfengwei/trace-waterfall
+/plugin marketplace add linfengwei/claude-code-trace-waterfall
 /plugin install trace-waterfall@trace-waterfall
 ```
 

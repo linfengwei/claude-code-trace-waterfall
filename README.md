@@ -34,14 +34,14 @@ Costs are API list-price estimates. On a subscription plan you are billed differ
 From a shell:
 
 ```bash
-claude plugin marketplace add linfengwei/trace-waterfall
+claude plugin marketplace add linfengwei/claude-code-trace-waterfall
 claude plugin install trace-waterfall@trace-waterfall
 ```
 
 Or at the Claude Code prompt in a terminal:
 
 ```
-/plugin marketplace add linfengwei/trace-waterfall
+/plugin marketplace add linfengwei/claude-code-trace-waterfall
 /plugin install trace-waterfall@trace-waterfall
 ```
 
