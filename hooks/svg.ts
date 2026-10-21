@@ -48,6 +48,13 @@ const STAT_H = 86
 const AXIS_H = 32
 const ROW_H = 32
 const LABEL_ROOM = 96
+// Each card is laid out this much wider than the pane and drawn back down to
+// fit, so every size below shows at this fraction: compact on a 1x screen.
+const ZOOM = 0.82
+// The narrowest a stat may be before the stats wrap to a second row.
+const STAT_MIN_W = 96
+// The least room a summary row's prompt keeps before the extra columns are dropped.
+const PROMPT_MIN_W = 220
 const FONT = `-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif`
 // How long a running bar keeps growing on its own between two redraws.
 const GROW_S = 30
@@ -133,7 +140,7 @@ function tiles(stats: Stat[], W: number, y0: number, cols: number): string[] {
     )
     if (s.sub) {
       out.push(
-        `<text x="${cx}" y="${top + 67}" font-size="11.5" ${s.subColor ? `fill="${s.subColor}"` : 'class="s"'}>${esc(clipTo(s.sub, colW - 24, 11.5))}</text>`,
+        `<text x="${cx}" y="${top + 67}" font-size="11.5" ${s.subColor ? `fill="${s.subColor}"` : 'class="s"'}>${esc(clipTo(s.sub, colW - 16, 11.5))}</text>`,
       )
     }
     const total = s.split?.reduce((a, p) => a + p.part, 0) ?? 0
@@ -170,9 +177,8 @@ export type SummaryRow = {
 
 /** Every turn at a glance: the totals, then one line per turn, newest first. */
 export function summarySvg(m: { width: number; stats: Stat[]; rows: SummaryRow[] }): { source: string; height: number } {
-  const W = Math.max(320, Math.round(m.width))
-  const isNarrow = W < 600
-  const cols = isNarrow ? 3 : m.stats.length
+  const W = Math.max(320, Math.round(m.width / ZOOM))
+  const cols = statColumns(W, m.stats.length)
   const statsH = Math.ceil(m.stats.length / cols) * STAT_H + 12
   const headY = HEADER_H + statsH
   const rowsY = headY + 30
@@ -189,28 +195,31 @@ export function summarySvg(m: { width: number; stats: Stat[]; rows: SummaryRow[]
     `<line class="rule" x1="0" y1="${headY}" x2="${W}" y2="${headY}"/>`,
   ]
 
-  // The columns, right to left from the edge; the prompt takes what is left.
-  const columns: { label: string; w: number; of: (r: SummaryRow) => string }[] = isNarrow
-    ? [
-        { label: 'COST', w: 60, of: r => r.cost },
-        { label: 'TIME', w: 56, of: r => r.duration },
-      ]
-    : [
-        { label: 'TPS', w: 54, of: r => r.tps },
-        { label: 'TTFT', w: 58, of: r => r.ttft },
-        { label: 'OUTPUT', w: 66, of: r => r.output },
-        { label: 'CACHED', w: 66, of: r => r.cached },
-        { label: 'INPUT', w: 62, of: r => r.input },
-        { label: 'COST', w: 62, of: r => r.cost },
-        { label: 'TIME', w: 58, of: r => r.duration },
-      ]
+  // The columns, right to left from the edge; the prompt takes what is left,
+  // and keeps the room for a readable line before the extra columns get any.
+  type Column = { label: string; w: number; of: (r: SummaryRow) => string }
+  const short: Column[] = [
+    { label: 'COST', w: 60, of: r => r.cost },
+    { label: 'TIME', w: 56, of: r => r.duration },
+  ]
+  const full: Column[] = [
+    { label: 'TPS', w: 54, of: r => r.tps },
+    { label: 'TTFT', w: 58, of: r => r.ttft },
+    { label: 'OUTPUT', w: 66, of: r => r.output },
+    { label: 'CACHED', w: 66, of: r => r.cached },
+    { label: 'INPUT', w: 62, of: r => r.input },
+    { label: 'COST', w: 62, of: r => r.cost },
+    { label: 'TIME', w: 58, of: r => r.duration },
+  ]
+  const promptX = PAD + 96
+  const roomFor = (cs: Column[]) => W - PAD - cs.reduce((a, c) => a + c.w, 0) - promptX - 12
+  const columns = roomFor(full) >= PROMPT_MIN_W ? full : short
   const right: number[] = []
   let edge = W - PAD
   for (const c of columns) {
     right.push(edge)
     edge -= c.w
   }
-  const promptX = PAD + 96
   const promptW = edge - promptX - 12
   out.push(
     `<text x="${PAD}" y="${headY + 20}" font-size="11" letter-spacing="1" class="s">TURN</text>`,
@@ -234,17 +243,22 @@ export function summarySvg(m: { width: number; stats: Stat[]; rows: SummaryRow[]
   })
   out.push('</svg>')
 
-  return { source: out.join(''), height }
+  return { source: out.join(''), height: Math.round(height * ZOOM) }
+}
+
+/** The stats in one row where each keeps its room, else in rows of three. */
+function statColumns(W: number, n: number): number {
+  return (W - PAD * 2) / n >= STAT_MIN_W ? n : Math.min(n, 3)
 }
 
 /**
  * The waterfall at the pane's own width: the name column and the label room
  * keep their size, the track takes the rest. The markup is `width="100%"`
- * over a viewBox of that width, so it fills the slot even where the width
- * we were told is a little off.
+ * over a viewBox of that width over ZOOM, so it fills the slot even where the
+ * width we were told is a little off.
  */
 export function waterfallSvg(m: SvgModel): { source: string; height: number } {
-  const W = Math.max(320, Math.round(m.width))
+  const W = Math.max(320, Math.round(m.width / ZOOM))
   const isNarrow = W < 600
   const nameW = Math.round(Math.min(300, Math.max(160, W * (isNarrow ? 0.38 : 0.34))))
   const trackX = PAD + nameW + 12
@@ -254,7 +268,7 @@ export function waterfallSvg(m: SvgModel): { source: string; height: number } {
   const x = (t: number) => r1(trackX + Math.min(1, Math.max(0, (t - m.origin) / rangeMs)) * trackW)
   const growPx = (trackW / rangeMs) * GROW_S * 1000
 
-  const statCols = isNarrow ? 3 : m.stats.length
+  const statCols = statColumns(W, m.stats.length)
   const statRows = Math.ceil(m.stats.length / statCols)
   const statsH = statRows * STAT_H + 12
   const axisY = HEADER_H + statsH
@@ -434,5 +448,5 @@ export function waterfallSvg(m: SvgModel): { source: string; height: number } {
   if (note) out.push(`<text x="${W - PAD}" y="${ly}" font-size="12" text-anchor="end" class="${note.cls}">${note.text}</text>`)
   out.push('</svg>')
 
-  return { source: out.join(''), height }
+  return { source: out.join(''), height: Math.round(height * ZOOM) }
 }
