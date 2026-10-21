@@ -59,6 +59,10 @@ const models = new Map<string, string>()
 // and its rows in its line height: about this many.
 const PX_PER_COLUMN = 7.5
 const PX_PER_ROW = 20
+// A Box's width column on the desktop, measured against the picture: wider than
+// the advance the picture is laid out to, and the blank a label holds is wider still.
+const PX_PER_BOX_COLUMN = 8.8
+const PX_PER_BLANK = 10
 // The alt of the hover cards' frame over a card's picture.
 const HOVER_ALT = 'Hover a row for its details'
 // A label that draws nothing yet holds its width: spaces are trimmed away, and
@@ -848,7 +852,9 @@ export const register: Register = on => {
         // The root folds from its own row; the bar holds the subagents'.
         const branches = r.spans.filter(s => s.id !== 'root' && (kids.get(s.id)?.length ?? 0) > 0)
         const rootTop = Math.max(0, Math.round((picture.root.top + picture.root.height / 2) / PX_PER_ROW - 0.5))
-        const rootCols = Math.max(4, Math.floor(picture.root.width / PX_PER_COLUMN))
+        const rootCols = Math.max(4, Math.floor(picture.root.width / PX_PER_BOX_COLUMN))
+        // Short of the box with the button's own padding, so it is never cut to an ellipsis; stretched to the box.
+        const rootBlanks = Math.max(2, Math.floor((rootCols * PX_PER_BOX_COLUMN - 24) / PX_PER_BLANK))
         const failed = r.spans.filter(s => s.status === 'failed' && s.error)
         const summary = `${title}, "${r.prompt}": ${sayStats(stats)}`
 
@@ -877,10 +883,9 @@ export const register: Register = on => {
                   <Svg source={picture.overlay} width={picture.width} height={picture.height} alt={HOVER_ALT} isInteractive />
                 </Box>
               )}
-              {/* The blank's width is the font's, not a column's: the label runs long and the box cuts it at the name's edge. */}
-              <Box position="absolute" top={rootTop} left={0} width={rootCols} overflow="hidden">
+              <Box position="absolute" top={rootTop} left={0} width={rootCols} flexDirection="column" alignItems="stretch">
                 <Button key={`fold:${keyOf(root)}`} plain onPress={() => fold(root)}>
-                  {BLANK.repeat(rootCols * 2)}
+                  {BLANK.repeat(rootBlanks)}
                 </Button>
               </Box>
             </Box>
