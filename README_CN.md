@@ -47,6 +47,14 @@ claude plugin install trace-waterfall@trace-waterfall
 
 桌面版 App 和 CLI 共用同一套 plugin，在任何終端機執行上面的 shell 指令即可。裝好後開一個新 session（或重開 Claude Code），pane 就會載入。
 
+## 更新
+
+```bash
+claude plugin update trace-waterfall@trace-waterfall
+```
+
+會從 GitHub 抓最新版本。更新後開一個新 session（或重開 Claude Code）才會載入。
+
 ## 使用
 
 - 在桌面版、手機與 VS Code，面板會在 session 開始時自動打開；在終端機輸入 `/trace` 打開（任何地方都可以用 `/trace` 重新打開）。

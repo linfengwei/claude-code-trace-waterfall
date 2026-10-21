@@ -47,6 +47,14 @@ Or at the Claude Code prompt in a terminal:
 
 The desktop app uses the same plugins as the CLI, so run the shell commands above in any terminal. Then start a new session (or restart Claude Code) to load the pane.
 
+## Update
+
+```bash
+claude plugin update trace-waterfall@trace-waterfall
+```
+
+It fetches the latest version from GitHub. Then start a new session (or restart Claude Code) to load it.
+
 ## Use
 
 - On desktop, mobile and VS Code the pane opens when a session starts. In the terminal, type `/trace` to open it; `/trace` reopens it anywhere.
