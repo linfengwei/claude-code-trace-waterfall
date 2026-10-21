@@ -4,30 +4,17 @@
 
 A Claude Code mod that opens a live **Trace** pane beside the conversation. Every LLM call, tool call and subagent of a turn, subagents of subagents included, is drawn as a bar on a timeline, with tokens, TTFT, tokens per second and an estimated cost.
 
-![Trace pane](media/preview.png)
-
-🎬 Intro video: [media/intro.mp4](media/intro.mp4). It is drawn with the mod's own SVG code; the numbers are sample data.
+https://github.com/user-attachments/assets/af4ad973-55d6-48d7-8f8a-be67e6a6b67e
 
 ## Features
 
-- **Live waterfall**: one row per span, laid out on a timeline. Running bars keep growing, and subagents are indented under the call that started them.
-- **Waiting vs. streaming**: the pale part of an LLM bar is the wait for the first byte; the solid part is streaming.
-- **Token split**
-  - Input: uncached, cache read and cache write, with the cached share and a split bar.
-  - Output: output tokens and streaming speed (tok/s).
-- **TTFT**: average time to the first byte, and to the first visible text or tool call.
-- **Calls and errors**: LLM and tool call counts. Failed calls are listed with their error message, with tags such as `<tool_use_error>` stripped.
-- **Slowest call**: a 🐢 sits in front of the name of the turn's slowest call.
-- **Context compaction**: a compaction is drawn as an amber bar where it happened, in the live turn under the loop that compacted, with the conversation's size before and after (`182k → 24k`). A `/compact` between turns gets a card of its own. Its summarizer's tokens and cost count toward the turn.
-- **One card per turn**: turns stack up as cards, newest on top. When a new turn goes live, finished turns fold themselves once; a turn you unfold stays open.
-- **Summary**: the top of the pane shows totals for all turns and a table of time, cost, input, cached, output, TTFT and TPS.
-- **Reset**: clears finished turns and keeps the one still running.
-- **Fold branches**: the **Fold** buttons at the top of each card fold a whole turn or any subagent; its calls are drawn as marks on the folded row.
-- **Details**: in the terminal and VS Code, press a row to see its input, output, tokens, TTFT, streaming time and error.
-- **Background subagents**: a subagent still running after its Agent call returns stays live until its own turn ends. Calls left unfinished when a turn is interrupted are marked Interrupted.
-- **Every surface**: a scalable SVG on desktop and mobile; text rows in the terminal and VS Code.
+- **Live waterfall**: every LLM call, tool call and subagent as a bar on a timeline, nested under what started it.
+- **Spot problems fast**: failed calls in red, 🐢 on the slowest call, compactions in amber (`182k → 24k`).
+- **Per turn and in total**: one card per turn, newest first, under a summary of all turns.
+- **Fold anything**: collapse a turn or a subagent to a single row.
+- **Everywhere**: SVG on desktop and mobile, text in the terminal and VS Code.
 
-Costs are API list-price estimates. On a subscription plan you are billed differently.
+Costs are estimates at API list prices.
 
 ## Install
 
