@@ -31,21 +31,21 @@ Costs are API list-price estimates. On a subscription plan you are billed differ
 
 ## Install
 
-At the Claude Code prompt in a terminal:
-
-```
-/plugin install trace-waterfall --marketplace linfengwei/trace-waterfall
-```
-
-Press `y` to add the marketplace, then pick a scope (user scope is the default; press Enter).
-
 From a shell:
 
 ```bash
-claude plugin install trace-waterfall --marketplace linfengwei/trace-waterfall
+claude plugin marketplace add linfengwei/trace-waterfall
+claude plugin install trace-waterfall@trace-waterfall
 ```
 
-In the desktop app, where `/plugin` does not run: click **+** next to the prompt box → **Plugins** → **Add marketplace**, enter `linfengwei/trace-waterfall`, then **Add plugin**.
+Or at the Claude Code prompt in a terminal:
+
+```
+/plugin marketplace add linfengwei/trace-waterfall
+/plugin install trace-waterfall@trace-waterfall
+```
+
+The desktop app uses the same plugins as the CLI, so run the shell commands above in any terminal. Then start a new session (or restart Claude Code) to load the pane.
 
 ## Use
 

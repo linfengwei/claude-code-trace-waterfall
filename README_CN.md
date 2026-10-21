@@ -31,21 +31,21 @@
 
 ## 安裝
 
-在終端機的 Claude Code 提示列輸入：
-
-```
-/plugin install trace-waterfall --marketplace linfengwei/trace-waterfall
-```
-
-接著按 `y` 加入 marketplace，再選擇安裝範圍（預設 user scope，按 Enter）。
-
-或從 shell：
+從 shell：
 
 ```bash
-claude plugin install trace-waterfall --marketplace linfengwei/trace-waterfall
+claude plugin marketplace add linfengwei/trace-waterfall
+claude plugin install trace-waterfall@trace-waterfall
 ```
 
-在桌面版 App（不能用 `/plugin` 的地方）：點提示框旁的 **+** → **Plugins** → **Add marketplace**，輸入 `linfengwei/trace-waterfall`，再 **Add plugin**。
+或在終端機的 Claude Code 提示列輸入：
+
+```
+/plugin marketplace add linfengwei/trace-waterfall
+/plugin install trace-waterfall@trace-waterfall
+```
+
+桌面版 App 和 CLI 共用同一套 plugin，在任何終端機執行上面的 shell 指令即可。裝好後開一個新 session（或重開 Claude Code），pane 就會載入。
 
 ## 使用
 
