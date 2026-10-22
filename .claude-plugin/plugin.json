@@ -6,5 +6,10 @@
     "name": "linfengwei"
   },
   "license": "MIT",
+  "homepage": "https://github.com/linfengwei/claude-code-trace-waterfall",
+  "repository": "https://github.com/linfengwei/claude-code-trace-waterfall",
+  "documentationUrl": "https://github.com/linfengwei/claude-code-trace-waterfall#readme",
+  "supportUrl": "https://github.com/linfengwei/claude-code-trace-waterfall/issues",
+  "privacyPolicyUrl": "https://github.com/linfengwei/claude-code-trace-waterfall#what-it-reads-and-sends",
   "types": "./types/index.d.ts"
 }
