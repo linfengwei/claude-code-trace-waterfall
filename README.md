@@ -81,6 +81,22 @@ claude plugin test .
 - **Sends nothing.** It makes no network requests, reads or writes no files, runs no processes and calls no models. Costs come from a price table in the code.
 - **Changes nothing.** Every event passes on as it came; it never blocks or rewrites a call. It adds the `/trace` command and the Trace pane, nothing else.
 
+### Hooks
+
+Each hook records what it sees and passes the event on as it came. None blocks, rewrites or retries anything.
+
+| Hook | What it does |
+| --- | --- |
+| `session.start` | Registers `/trace`, opens the pane on every surface but the terminal, and starts a 2-second clock that grows running bars |
+| `command.run` (`/trace`) | Opens the Trace pane |
+| `turn.start` | Starts a card for the turn with its prompt, or a row for a subagent's turn |
+| `turn.step` | Adds a row for each model call with its model, time to first byte and token usage, and passes the stream through untouched |
+| `tool.call` | Adds a row for each tool call with its name, input, first line of output or error, and how long it took; the call's result is returned as it came, and if the hook fails the call goes on without it |
+| `agent.spawn` | Links a subagent's rows under the call that started it |
+| `session.compact` | Adds a row for a context compaction with the tokens before and after |
+| `turn.complete` | Ends the turn's card and marks how it ended |
+| `ui.render` (the Trace pane) | Draws the pane from what the hooks above recorded |
+
 ## Limits
 
 - The usage Claude Code passes to mods has input, output, cache read and cache write only, with no thinking token count, so thinking is not shown.

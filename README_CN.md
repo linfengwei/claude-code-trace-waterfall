@@ -81,6 +81,22 @@ claude plugin test .
 - **不傳送任何資料**：不發網路請求、不讀寫檔案、不執行程式，也不呼叫模型。成本是用程式內建的價格表算的。
 - **不改變任何行為**：每個事件都原封不動往下傳，不會擋下或改寫任何呼叫。只新增 `/trace` 指令和 Trace pane。
 
+### Hooks
+
+每個 hook 只記錄它看到的東西，事件原封不動往下傳，不會擋下、改寫或重試任何呼叫。
+
+| Hook | 做什麼 |
+| --- | --- |
+| `session.start` | 註冊 `/trace`；在終端機以外的介面打開 pane；啟動每 2 秒一次的時鐘，讓進行中的 bar 變長 |
+| `command.run`（`/trace`） | 打開 Trace pane |
+| `turn.start` | 為這個 turn 開一張卡片並記下提示；subagent 的 turn 則加一列 |
+| `turn.step` | 每次模型呼叫加一列，記下模型、第一個 byte 的時間與 token 用量；串流原樣往下傳 |
+| `tool.call` | 每個工具呼叫加一列，記下名稱、輸入、輸出第一行或錯誤，以及花了多久；呼叫的結果原樣回傳，hook 自己出錯時呼叫照常進行 |
+| `agent.spawn` | 把 subagent 的列接到啟動它的呼叫底下 |
+| `session.compact` | 為 context 壓縮加一列，記下壓縮前後的 token 數 |
+| `turn.complete` | 結束這個 turn 的卡片，標出結束的方式 |
+| `ui.render`（Trace pane） | 依上面記下的資料畫出 pane |
+
 ## 限制
 
 - Claude Code 傳給 mod 的 usage 只有 input、output、cache read 與 cache write，沒有 thinking token 數，所以不顯示 thinking。
