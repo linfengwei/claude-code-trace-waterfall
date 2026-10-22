@@ -74,8 +74,19 @@ claude plugin test .
 | `types/index.d.ts` | The `$.state` type contract |
 | `tests/trace.test.tsx` | Tests for every surface, history, background subagents, compaction and huge turns |
 
+## What it reads and sends
+
+- **Reads** only the current session's own events: each turn's prompt, each model call's model and token usage, each tool call's name, input, output and error, subagent starts and compactions.
+- **Keeps** them in this session's state, at most 30 turns. It writes no files of its own.
+- **Sends nothing.** It makes no network requests, reads or writes no files, runs no processes and calls no models. Costs come from a price table in the code.
+- **Changes nothing.** Every event passes on as it came; it never blocks or rewrites a call. It adds the `/trace` command and the Trace pane, nothing else.
+
 ## Limits
 
 - The usage Claude Code passes to mods has input, output, cache read and cache write only, with no thinking token count, so thinking is not shown.
 - One card's SVG holds at most 131072 characters and 4096 px of height. A bigger turn draws its root and its latest rows and says how many it left out; fold a branch to see the rest.
 - The pane keeps at most 30 turns.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

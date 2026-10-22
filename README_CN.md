@@ -74,8 +74,19 @@ claude plugin test .
 | `types/index.d.ts` | `$.state` 的型別合約 |
 | `tests/trace.test.tsx` | 各介面、歷史、背景 subagent、壓縮 context、超大 turn 的測試 |
 
+## 讀取與傳送的資料
+
+- **讀取**：只讀目前 session 自己的事件，包括每個 turn 的提示、每次模型呼叫的模型與 token 用量、每個工具呼叫的名稱、輸入、輸出與錯誤，以及 subagent 的啟動與 context 壓縮。
+- **保存**：只存在這個 session 的狀態裡，最多 30 個 turn，不會自己寫任何檔案。
+- **不傳送任何資料**：不發網路請求、不讀寫檔案、不執行程式，也不呼叫模型。成本是用程式內建的價格表算的。
+- **不改變任何行為**：每個事件都原封不動往下傳，不會擋下或改寫任何呼叫。只新增 `/trace` 指令和 Trace pane。
+
 ## 限制
 
 - Claude Code 傳給 mod 的 usage 只有 input、output、cache read 與 cache write，沒有 thinking token 數，所以不顯示 thinking。
 - 一張卡片的 SVG 上限是 131072 字元。turn 太大時只畫根節點與最新的列，並標示有幾列沒畫；收合分支就能看到其他列。
 - 最多保留 30 個 turn。
+
+## 授權
+
+MIT，詳見 [LICENSE](LICENSE)。
